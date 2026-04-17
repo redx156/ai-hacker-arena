@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXIOM — Security Arena Dashboard</title>
+<meta name="description" content="AXIOM Adversarial Intelligence Red Team Agent Dashboard">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- vis-network (same library pyvis wraps) -->
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+<!-- Chart.js for judge tab -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --bg-root: #0a0a0f;
+  --bg-panel: #0f1117;
+  --bg-panel-hover: #141822;
+  --bg-card: #12141d;
+  --bg-input: #0d0f18;
+  --border-default: #1e2433;
+  --border-active: #00d4ff44;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8892a6;
+  --text-dim: #4a5568;
+  --accent-cyan: #00d4ff;
+  --accent-green: #00ff88;
+  --accent-red: #ff3366;
+  --accent-amber: #ffaa00;
+  --accent-purple: #8b5cf6;
+  --accent-cyan-dim: #00d4ff22;
+  --glow-cyan: 0 0 12px #00d4ff33, 0 0 4px #00d4ff22;
+  --glow-red: 0 0 12px #ff336633;
+  --glow-green: 0 0 12px #00ff8833;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{font-family:var(--font-sans);background:var(--bg-root);color:var(--text-primary);min-height:100vh;overflow-x:hidden}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1e2433;border-radius:3px}
+
+/* ═══ NAVBAR ═══ */
+.navbar{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;height:60px;padding:0 28px;background:rgba(15,17,23,.85);backdrop-filter:blur(16px) saturate(1.6);border-bottom:1px solid var(--border-default)}
+.navbar-logo{display:flex;align-items:center;gap:14px;user-select:none}
+.logo-ascii{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-cyan);text-shadow:0 0 10px #00d4ff55;letter-spacing:1px}
+.logo-subtitle{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:3px;text-transform:uppercase;margin-top:2px}
+.navbar-tabs{display:flex;gap:4px}
+.nav-tab{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:8px 22px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .25s ease}
+.nav-tab:hover{color:var(--text-primary);background:var(--bg-panel-hover)}
+.nav-tab.active{color:var(--accent-cyan);background:var(--accent-cyan-dim);border-color:var(--border-active);box-shadow:var(--glow-cyan)}
+.session-badge{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);padding:6px 14px;border:1px solid var(--border-default);border-radius:20px;background:var(--bg-panel)}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-green);animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,255,136,.5)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(0,255,136,0)}}
+
+/* ═══ LAYOUT ═══ */
+.main-content{max-width:1600px;margin:0 auto;padding:24px 28px 60px}
+.tab-panel{display:none;animation:fadeIn .4s ease}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.panel{background:var(--bg-panel);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:20px}
+.panel-glow{box-shadow:var(--glow-cyan);border-color:var(--border-active)}
+.panel-title{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.panel-title .icon{color:var(--accent-cyan);font-size:14px}
+
+/* ═══ FORM ═══ */
+.form-group{margin-bottom:16px}
+.form-label{display:block;font-family:var(--font-mono);font-size:10px;font-weight:500;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+.form-input,.form-textarea,.form-select{width:100%;padding:10px 14px;font-family:var(--font-mono);font-size:12px;color:var(--text-primary);background:var(--bg-input);border:1px solid var(--border-default);border-radius:var(--radius-sm);outline:none;transition:all .25s ease}
+.form-input:focus,.form-textarea:focus,.form-select:focus{border-color:var(--accent-cyan);box-shadow:var(--glow-cyan)}
+.form-textarea{resize:vertical;min-height:80px;line-height:1.6}
+.form-select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238892a6' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.form-select option{background:var(--bg-panel);color:var(--text-primary)}
+
+.btn-launch{width:100%;padding:12px;font-family:var(--font-mono);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,#ff3366,#cc2952);border:1px solid #ff336666;border-radius:var(--radius-sm);cursor:pointer;transition:all .3s ease;overflow:hidden}
+.btn-launch:hover{box-shadow:var(--glow-red);transform:translateY(-1px)}
+.btn-export{padding:10px 24px;font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--accent-cyan);background:var(--accent-cyan-dim);border:1px solid var(--border-active);border-radius:var(--radius-sm);cursor:pointer;transition:all .25s ease}
+.btn-export:hover{background:#00d4ff22;box-shadow:var(--glow-cyan)}
+.btn-launch:disabled{opacity:0.4!important;cursor:not-allowed!important;transform:none!important}.btn-launch:disabled:hover{box-shadow:none;transform:none}
+.empty-state{display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-dim);font-family:var(--font-mono);font-size:12px;letter-spacing:1px;text-align:center;line-height:1.6}
+.btn-phase-surface{background:linear-gradient(135deg,#00d4ff,#0099cc)!important;border-color:#00d4ff66!important}
+.btn-phase-persona{background:linear-gradient(135deg,#8b5cf6,#6d3fc0)!important;border-color:#8b5cf666!important}
+.btn-phase-defend{background:linear-gradient(135deg,#00ff88,#00cc6a)!important;border-color:#00ff8866!important;color:#0a0a0f!important}
+.btn-phase-judge{background:linear-gradient(135deg,#8b5cf6,#6d3fc0)!important;border-color:#8b5cf666!important}
+
+/* ═══ BADGES ═══ */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.5px;border-radius:4px;white-space:nowrap}
+.badge-critical{background:#ff336622;color:var(--accent-red);border:1px solid #ff336644}
+.badge-high{background:#ff8c0022;color:#ff8c00;border:1px solid #ff8c0044}
+.badge-medium{background:#ffaa0022;color:var(--accent-amber);border:1px solid #ffaa0044}
+.badge-low{background:#00ff8818;color:var(--accent-green);border:1px solid #00ff8844}
+.badge-fc{background:#ff336622;color:var(--accent-red);border:1px solid #ff336644}
+.badge-pb{background:#ffaa0022;color:var(--accent-amber);border:1px solid #ffaa0044}
+.badge-def{background:#00ff8818;color:var(--accent-green);border:1px solid #00ff8844}
+.badge-safe{background:#4a556822;color:var(--text-dim);border:1px solid #4a556844}
+.badge-vuln{padding:3px 8px;font-size:9px;letter-spacing:.8px;border-radius:3px;background:#8b5cf622;color:var(--accent-purple);border:1px solid #8b5cf644}
+.badge-upheld{background:#00ff8818;color:var(--accent-green);border:1px solid #00ff8844}
+.badge-weakened{background:#ffaa0022;color:var(--accent-amber);border:1px solid #ffaa0044}
+.badge-false{background:#ff336622;color:var(--accent-red);border:1px solid #ff336644}
+
+/* ═══ STEPPER ═══ */
+.phase-stepper{display:flex;align-items:center;justify-content:center;margin-bottom:24px;padding:16px 0}
+.phase-step{display:flex;align-items:center;gap:10px;padding:8px 16px}
+.phase-step .step-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;border:2px solid var(--border-default);color:var(--text-dim);background:var(--bg-panel)}
+.phase-step .step-label{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);white-space:nowrap}
+.phase-step.completed .step-num{background:var(--accent-green);border-color:var(--accent-green);color:#0a0a0f}
+.phase-step.completed .step-label{color:var(--accent-green)}
+.phase-step.active .step-num{background:var(--accent-cyan-dim);border-color:var(--accent-cyan);color:var(--accent-cyan);box-shadow:var(--glow-cyan)}
+.phase-step.active .step-label{color:var(--accent-cyan)}
+.phase-connector{width:40px;height:2px;background:var(--border-default);flex-shrink:0}
+.phase-connector.done{background:var(--accent-green)}
+.phase-connector.cur{background:linear-gradient(90deg,var(--accent-green),var(--accent-cyan))}
+
+/* ═══ HACKER LAYOUT ═══ */
+.hacker-layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+.payload-memory{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.payload-list{border:1px solid var(--border-default);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;padding:8px}
+.payload-list.success{border-color:#00ff8833;background:#00ff8808}
+.payload-list.fail{border-color:#ff336633;background:#ff336608}
+.payload-list-title{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.payload-list-title.success{color:var(--accent-green)}
+.payload-list-title.fail{color:var(--accent-red)}
+.payload-item{font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);padding:4px 6px;border-bottom:1px solid #1e243322;line-height:1.5;word-break:break-all}
+.payload-item:last-child{border-bottom:none}
+
+/* ═══ VIS.JS GRAPH CONTAINER ═══ */
+.vis-graph-container{width:100%;height:520px;border:1px solid var(--border-default);border-radius:var(--radius-md);overflow:hidden;background:#0d0f18}
+.vis-graph-container-short{height:400px}
+
+/* ═══ GRAPH INFO PANEL ═══ */
+.graph-info{margin-top:16px;padding:16px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-md);display:none}
+.graph-info.visible{display:block;animation:fadeIn .3s ease}
+.graph-info-title{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent-cyan);margin-bottom:10px;letter-spacing:1px}
+.graph-info-row{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);margin-bottom:6px;line-height:1.6}
+.graph-info-row b{color:var(--text-primary)}
+
+.graph-legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 16px;border-top:1px solid var(--border-default);background:#0d0f1866}
+.legend-item{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* ═══ DATA TABLE ═══ */
+.data-table-wrap{overflow-x:auto;border:1px solid var(--border-default);border-radius:var(--radius-md)}
+.data-table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px}
+.data-table thead th{padding:10px 14px;text-align:left;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);background:var(--bg-card);border-bottom:1px solid var(--border-default);cursor:pointer;user-select:none;white-space:nowrap}
+.data-table thead th:hover{color:var(--accent-cyan)}
+.data-table tbody tr{border-bottom:1px solid #1e243322;transition:background .2s}
+.data-table tbody tr:nth-child(even){background:#0d0f1666}
+.data-table tbody tr:hover{background:#00d4ff08}
+.data-table tbody td{padding:10px 14px;color:var(--text-secondary);white-space:nowrap}
+.col-score{color:var(--text-primary)!important;font-weight:600}
+
+/* ═══ BUILDER ═══ */
+.builder-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.vuln-card{background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:16px;margin-bottom:12px;animation:slideUp .4s ease backwards;transition:border-color .25s}
+.vuln-card:hover{border-color:var(--border-active)}
+.vuln-card:nth-child(1){animation-delay:.05s}.vuln-card:nth-child(2){animation-delay:.1s}.vuln-card:nth-child(3){animation-delay:.15s}.vuln-card:nth-child(4){animation-delay:.2s}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.vuln-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.vuln-card-body{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);line-height:1.6}
+.occ-count{font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--text-primary);margin-right:8px}
+.guardrail-list{max-height:220px;overflow-y:auto;padding:12px;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-md);margin-top:16px}
+.guardrail-item{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);padding:6px 0;border-bottom:1px solid #1e243322;line-height:1.5}
+.guardrail-item:last-child{border-bottom:none}
+
+/* ═══ JUDGE ═══ */
+.verdict-banner{padding:24px 32px;border-radius:var(--radius-lg);text-align:center;margin-bottom:24px}
+.verdict-banner.secure{background:linear-gradient(135deg,#00ff8812,#00ff8808);border:1px solid #00ff8844;box-shadow:var(--glow-green)}
+.verdict-banner .verdict-label{font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;color:var(--accent-green)}
+.verdict-banner .verdict-text{font-family:var(--font-mono);font-size:28px;font-weight:800;letter-spacing:4px;color:var(--accent-green);animation:pv 3s ease-in-out infinite}
+@keyframes pv{0%,100%{opacity:1}50%{opacity:.75}}
+.judge-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.judge-grid .full-width{grid-column:1/-1}
+.chart-container{position:relative;height:320px;width:100%;background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:16px}
+.improvement-bar-cell{display:flex;align-items:center;gap:8px}
+.improvement-bar{width:80px;height:6px;background:var(--border-default);border-radius:3px;overflow:hidden;flex-shrink:0}
+.improvement-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent-cyan),var(--accent-green));border-radius:3px}
+.session-summary-card{background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:20px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between}
+.summary-item{display:flex;flex-direction:column;gap:4px}
+.summary-item-label{font-family:var(--font-mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)}
+.summary-item-value{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)}
+.section-gap{margin-top:20px}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-logo"><div><div class="logo-ascii">▸ AXIOM</div><div class="logo-subtitle">Security Arena</div></div></div>
+  <div class="navbar-tabs">
+    <button class="nav-tab active" data-tab="hacker"><span>⚔️</span> Hacker</button>
+    <button class="nav-tab" data-tab="builder"><span>🛡️</span> Builder</button>
+    <button class="nav-tab" data-tab="judge"><span>⚖️</span> Judge</button>
+  </div>
+  <div class="session-badge"><div class="status-dot"></div><span>● RUNNING</span></div>
+</nav>
+
+<main class="main-content">
+
+  <!-- ════════════════════════ HACKER TAB ════════════════════════ -->
+  <section class="tab-panel active" id="panel-hacker">
+    <div class="phase-stepper">
+      <div class="phase-step active"><div class="step-num">1</div><div class="step-label">Surface Analysis</div></div>
+      <div class="phase-connector"></div>
+      <div class="phase-step"><div class="step-num">2</div><div class="step-label">Persona Generation</div></div>
+      <div class="phase-connector"></div>
+      <div class="phase-step"><div class="step-num">3</div><div class="step-label">Attack Execution</div></div>
+      <div class="phase-connector"></div>
+      <div class="phase-step"><div class="step-num">4</div><div class="step-label">Brief Synthesis</div></div>
+    </div>
+    <div class="hacker-layout">
+      <div>
+        <div class="panel panel-glow">
+          <div class="panel-title"><span class="icon">⚡</span> Attack Configuration</div>
+          <div class="form-group"><label class="form-label">Target Endpoint</label><input type="text" class="form-input" id="input-target" value="https://api.target-ai.example.com/chat"></div>
+          <div class="form-group"><label class="form-label">Security Claims</label><textarea class="form-textarea" id="input-claims">No prompt injection attacks
+No system prompt leakage
+Follows content policy guidelines</textarea></div>
+          <div class="form-group"><label class="form-label">Max Generations</label><select class="form-select" id="input-maxgens"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select></div>
+          <button class="btn-launch btn-phase-surface" id="btn-surface" onclick="runSurfaceAnalysis()">⚡ Run Surface Analysis</button>
+          <button class="btn-launch btn-phase-persona" id="btn-personas" onclick="runPersonaGeneration()" disabled style="margin-top:8px">🎭 Generate Personas</button>
+          <button class="btn-launch" id="btn-launch" onclick="launchAttack()" disabled style="margin-top:8px">🚀 Launch Attack</button>
+        </div>
+        <div class="panel section-gap">
+          <div class="panel-title"><span class="icon">🧠</span> Payload Memory</div>
+          <div class="payload-memory">
+            <div><div class="payload-list-title success">✅ Successful</div><div class="payload-list success" id="success-payloads"></div></div>
+            <div><div class="payload-list-title fail">❌ Failed</div><div class="payload-list fail" id="failed-payloads"></div></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="panel">
+          <div class="panel-title"><span class="icon">🕸️</span> Attack Evolution Graph <span style="margin-left:auto;font-size:9px;color:var(--text-dim);letter-spacing:0;">drag nodes · scroll to zoom · click for details</span></div>
+          <div class="vis-graph-container" id="atk-graph"></div>
+          <div class="graph-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#ff3366"></div>Full Compromise</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ffaa00"></div>Partial Breach</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#00ff88"></div>Deflected</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>Plugin</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#4a5568"></div>Safe</div>
+          </div>
+          <!-- Click info panel -->
+          <div class="graph-info" id="atk-info">
+            <div class="graph-info-title" id="atk-info-title"></div>
+            <div id="atk-info-body"></div>
+          </div>
+        </div>
+        <div class="panel section-gap">
+          <div class="panel-title"><span class="icon">📋</span> Attack Attempts</div>
+          <div class="data-table-wrap">
+            <table class="data-table"><thead><tr>
+              <th>Gen</th><th>Type</th><th>Vuln</th><th>Drift</th><th>Protocol</th><th>Score</th><th>Outcome</th>
+            </tr></thead><tbody id="atk-tbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════ BUILDER TAB ════════════════════════ -->
+  <section class="tab-panel" id="panel-builder">
+    <button class="btn-launch btn-phase-defend" id="btn-defend" onclick="runDefense()" style="margin-bottom:16px;width:100%">🛡️ Harden System</button>
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-title"><span class="icon">🧬</span> Persona Evolution Graph <span style="margin-left:auto;font-size:9px;color:var(--text-dim);letter-spacing:0;">drag · zoom · click a version for details</span></div>
+      <div class="vis-graph-container vis-graph-container-short" id="def-graph"></div>
+      <div class="graph-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#00ff88"></div>v1 (Original)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#aaff00"></div>v2 (Patched)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffff00"></div>v3 (Hardened)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff8800"></div>v4 (Reinforced)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff0044"></div>v5 (Final)</div>
+      </div>
+      <div class="graph-info" id="def-info">
+        <div class="graph-info-title" id="def-info-title"></div>
+        <div id="def-info-body"></div>
+      </div>
+    </div>
+    <div class="builder-cols">
+      <div class="panel"><div class="panel-title"><span class="icon">🔍</span> Vulnerabilities Found</div><div id="vuln-cards"></div></div>
+      <div><div class="panel"><div class="panel-title"><span class="icon">🛡️</span> Applied Guardrails</div><div class="guardrail-list" id="guardrails"></div></div></div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════ JUDGE TAB ════════════════════════ -->
+  <section class="tab-panel" id="panel-judge">
+    <button class="btn-launch btn-phase-judge" id="btn-judge" onclick="runJudge()" style="margin-bottom:16px;width:100%">⚖️ Run Evaluation</button>
+    <div class="verdict-banner secure" id="verdict-banner">
+      <div class="verdict-label">Final System Verdict</div>
+      <div class="verdict-text">🟢 SECURE</div>
+    </div>
+    <div class="judge-grid">
+      <div class="panel"><div class="panel-title"><span class="icon">📊</span> Score Comparison</div><div class="chart-container"><canvas id="chart-judge"></canvas></div></div>
+      <div class="panel"><div class="panel-title"><span class="icon">⚖️</span> Claims Verdict</div>
+        <div class="data-table-wrap"><table class="data-table"><thead><tr><th>Claim</th><th>Pre</th><th>Post</th><th>Improvement</th><th>Verdict</th></tr></thead><tbody id="claims-tbody"></tbody></table></div>
+      </div>
+      <div class="full-width">
+        <div class="session-summary-card">
+          <div class="summary-item"><div class="summary-item-label">Session ID</div><div class="summary-item-value">axm-7f3a91e2</div></div>
+          <div class="summary-item"><div class="summary-item-label">Timestamp</div><div class="summary-item-value">2026-04-16T14:33:48Z</div></div>
+          <div class="summary-item"><div class="summary-item-label">Claims</div><div class="summary-item-value">3</div></div>
+          <div class="summary-item"><div class="summary-item-label">Records</div><div class="summary-item-value">12</div></div>
+          <div class="summary-item"><div class="summary-item-label">Verdict</div><div class="summary-item-value" style="color:var(--accent-green)">SECURE</div></div>
+          <button class="btn-export" id="btn-export">📦 Export JSON</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   STATE & CONSTANTS
+   ═══════════════════════════════════════════════════════════════ */
+let currentPhase = -1;
+let ATK = [];
+let ATK_EDGES = [];
+let PERSONAS = [];
+
+const OUT_COLOR = {'FULL COMPROMISE':'#ff3366','PARTIAL BREACH':'#ffaa00','DEFLECTED':'#00ff88','SAFE':'#4a5568'};
+const TYPE_SHAPE = {plugin:'diamond', persona:'dot', mutation:'dot', evolved:'star', crossbreed:'triangle'};
+const PERSONA_COLORS = ['#00ff88','#aaff00','#ffff00','#ff8800','#ff0044'];
+
+let atkNetwork = null;
+let defNetwork = null;
+let judgeChart = null;
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+/* ═══════════════════════════════════════════════════════════════
+   STEPPER MANAGEMENT
+   ═══════════════════════════════════════════════════════════════ */
+function updateStepper(phase) {
+  currentPhase = phase;
+  document.querySelectorAll('.phase-step').forEach((step, i) => {
+    step.classList.remove('completed', 'active');
+    const num = step.querySelector('.step-num');
+    if (i <= phase) { step.classList.add('completed'); num.textContent = '✓'; }
+    else if (i === phase + 1) { step.classList.add('active'); num.textContent = String(i + 1); }
+    else { num.textContent = String(i + 1); }
+  });
+  document.querySelectorAll('.phase-connector').forEach((conn, i) => {
+    conn.classList.remove('done', 'cur');
+    if (i <= phase) conn.classList.add('done');
+    else if (i === phase + 1) conn.classList.add('cur');
+  });
+  updateButtons();
+}
+
+function updateButtons() {
+  const btnS = document.getElementById('btn-surface');
+  const btnP = document.getElementById('btn-personas');
+  const btnL = document.getElementById('btn-launch');
+  // Surface: always available
+  if (btnS) { btnS.disabled = false; btnS.style.opacity = '1'; btnS.style.cursor = 'pointer'; }
+  // Personas: need phase >= 0
+  if (btnP) { btnP.disabled = currentPhase < 0; btnP.style.opacity = btnP.disabled ? '0.4' : '1'; btnP.style.cursor = btnP.disabled ? 'not-allowed' : 'pointer'; }
+  // Launch: need phase >= 1
+  if (btnL) { btnL.disabled = currentPhase < 1; btnL.style.opacity = btnL.disabled ? '0.4' : '1'; btnL.style.cursor = btnL.disabled ? 'not-allowed' : 'pointer'; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   API HELPERS
+   ═══════════════════════════════════════════════════════════════ */
+async function apiCall(url, body = {}) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) { const err = await res.text(); throw new Error(err); }
+  return res.json();
+}
+
+function btnState(btn, state, text) {
+  if (!btn) return;
+  if (state === 'loading') { btn.textContent = text; btn.disabled = true; btn.style.opacity = '0.7'; }
+  else if (state === 'success') { btn.textContent = text; btn.style.background = 'linear-gradient(135deg,#00ff88,#00cc6a)'; btn.style.borderColor = '#00ff8866'; btn.style.opacity = '1'; btn.style.color = '#0a0a0f'; }
+  else if (state === 'reset') { btn.textContent = text; btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = ''; btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 0: SURFACE ANALYSIS
+   ═══════════════════════════════════════════════════════════════ */
+async function runSurfaceAnalysis() {
+  const btn = document.getElementById('btn-surface');
+  const target = document.getElementById('input-target').value;
+  const claims = document.getElementById('input-claims').value.split('\n').filter(c => c.trim());
+  if (!target || !claims.length) { alert('Enter a target endpoint and at least one security claim.'); return; }
+  btnState(btn, 'loading', '⏳ ANALYZING...');
+  try {
+    const data = await apiCall('/api/surface', { target, claims });
+    document.querySelector('.session-badge span').textContent = data.mode === 'live' ? '● LIVE' : '● DEMO';
+    updateStepper(0);
+    btnState(btn, 'success', '✓ SURFACE MAPPED');
+    setTimeout(() => { btnState(btn, 'reset', '⚡ Run Surface Analysis'); btn.className = 'btn-launch btn-phase-surface'; updateButtons(); }, 1500);
+  } catch (e) {
+    btnState(btn, 'reset', '⚡ Run Surface Analysis'); btn.className = 'btn-launch btn-phase-surface';
+    alert('Surface analysis failed: ' + e.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 1: PERSONA GENERATION
+   ═══════════════════════════════════════════════════════════════ */
+async function runPersonaGeneration() {
+  const btn = document.getElementById('btn-personas');
+  btnState(btn, 'loading', '⏳ GENERATING...');
+  try {
+    await apiCall('/api/personas');
+    updateStepper(1);
+    btnState(btn, 'success', '✓ PERSONAS READY');
+    setTimeout(() => { btnState(btn, 'reset', '🎭 Generate Personas'); btn.className = 'btn-launch btn-phase-persona'; updateButtons(); }, 1500);
+  } catch (e) {
+    btnState(btn, 'reset', '🎭 Generate Personas'); btn.className = 'btn-launch btn-phase-persona';
+    alert('Persona generation failed: ' + e.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 2+3: ATTACK EXECUTION
+   ═══════════════════════════════════════════════════════════════ */
+async function launchAttack() {
+  const btn = document.getElementById('btn-launch');
+  const maxGens = parseInt(document.getElementById('input-maxgens').value || '5');
+  btnState(btn, 'loading', '⏳ ATTACKING...');
+  try {
+    const data = await apiCall('/api/attack', { max_generations: maxGens });
+    ATK = data.attacks;
+    ATK.forEach(a => { if (!a.score) a.score = +(0.6*a.drift + 0.25*a.proto + 0.15*a.cons).toFixed(3); });
+    ATK_EDGES = data.edges;
+    initAttackGraph();
+    renderAtkTable();
+    renderPayloads();
+    updateStepper(2);
+    btnState(btn, 'success', '✓ ATTACK COMPLETE');
+    setTimeout(() => { btnState(btn, 'reset', '🚀 Launch Attack'); updateButtons(); }, 2000);
+  } catch (e) {
+    btnState(btn, 'reset', '🚀 Launch Attack');
+    alert('Attack failed: ' + e.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BUILDER: HARDEN SYSTEM
+   ═══════════════════════════════════════════════════════════════ */
+async function runDefense() {
+  const btn = document.getElementById('btn-defend');
+  if (ATK.length === 0) { alert('Run an attack first before hardening.'); return; }
+  btnState(btn, 'loading', '⏳ HARDENING...');
+  try {
+    const data = await apiCall('/api/defend');
+    renderVulnCards(data.vulns);
+    renderGuardrails(data.guardrails);
+    if (data.personas && data.personas.length) {
+      PERSONAS = data.personas;
+      initPersonaGraph();
+    }
+    btnState(btn, 'success', '✓ SYSTEM HARDENED');
+    setTimeout(() => { btnState(btn, 'reset', '🛡️ Harden System'); btn.className = 'btn-launch btn-phase-defend'; }, 2000);
+  } catch (e) {
+    btnState(btn, 'reset', '🛡️ Harden System'); btn.className = 'btn-launch btn-phase-defend';
+    alert('Defense failed: ' + e.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   JUDGE: RUN EVALUATION
+   ═══════════════════════════════════════════════════════════════ */
+async function runJudge() {
+  const btn = document.getElementById('btn-judge');
+  if (ATK.length === 0) { alert('Run an attack and defense first.'); return; }
+  btnState(btn, 'loading', '⏳ EVALUATING...');
+  try {
+    const data = await apiCall('/api/judge');
+    renderJudgeVerdict(data);
+    renderJudgeChart(data);
+    renderClaimsTable(data);
+    renderSessionSummary(data);
+    btnState(btn, 'success', '✓ EVALUATION COMPLETE');
+    setTimeout(() => { btnState(btn, 'reset', '⚖️ Run Evaluation'); btn.className = 'btn-launch btn-phase-judge'; }, 2000);
+  } catch (e) {
+    btnState(btn, 'reset', '⚖️ Run Evaluation'); btn.className = 'btn-launch btn-phase-judge';
+    alert('Evaluation failed: ' + e.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HACKER — ATTACK EVOLUTION GRAPH (vis-network)
+   ═══════════════════════════════════════════════════════════════ */
+function initAttackGraph() {
+  if (atkNetwork) { atkNetwork.destroy(); atkNetwork = null; }
+  const container = document.getElementById('atk-graph');
+  if (!ATK.length) { container.innerHTML = '<div class="empty-state">⚡ Run Surface Analysis → Generate Personas → Launch Attack<br>to see the evolution graph</div>'; return; }
+  container.innerHTML = '';
+
+  const nodes = new vis.DataSet(ATK.map(a => ({
+    id: a.id,
+    label: a.id + '\n' + a.score.toFixed(3),
+    color: {
+      background: a.type === 'plugin' ? '#8b5cf6' : (OUT_COLOR[a.out] || '#4a5568'),
+      border: a.type === 'plugin' ? '#a78bfa' : (OUT_COLOR[a.out] || '#4a5568'),
+      highlight: { background: '#ffffff', border: '#00d4ff' },
+      hover: { background: a.type === 'plugin' ? '#a78bfa' : (OUT_COLOR[a.out] || '#888'), border: '#00d4ff' },
+    },
+    shape: TYPE_SHAPE[a.type] || 'dot',
+    size: 18 + a.score * 22,
+    font: { color: '#e2e8f0', size: 11, face: 'JetBrains Mono, monospace' },
+    borderWidth: 2,
+    shadow: { enabled: true, color: (OUT_COLOR[a.out] || '#4a5568') + '44', size: 12 },
+  })));
+
+  const edgeColors = {seed:'#00d4ff88',mutate:'#ffaa0088',evolve:'#ff336688',crossbreed:'#8b5cf688'};
+  const edges = new vis.DataSet(ATK_EDGES.map((e, i) => ({
+    id: i, from: e.from, to: e.to, label: e.label,
+    color: { color: edgeColors[e.label] || '#ffffff44', highlight: '#00d4ff', hover: '#00d4ff88' },
+    width: 3, arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+    dashes: e.label === 'seed' ? [8, 5] : false,
+    font: { color: '#4a5568', size: 9, face: 'JetBrains Mono, monospace', strokeWidth: 0 },
+    smooth: { type: 'cubicBezier', roundness: 0.4 },
+  })));
+
+  atkNetwork = new vis.Network(container, { nodes, edges }, {
+    physics: { enabled: true, solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -60, centralGravity: 0.008, springLength: 140, springConstant: 0.06, damping: 0.5 },
+      stabilization: { iterations: 150, fit: true } },
+    interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true, dragNodes: true },
+    layout: { hierarchical: false }, edges: { smooth: { type: 'cubicBezier' } },
+  });
+
+  atkNetwork.on('hoverNode', (params) => {
+    const panel = document.getElementById('atk-info');
+    const a = ATK.find(x => x.id === params.node);
+    if (!a) return;
+    const bc = a.out==='FULL COMPROMISE'?'badge-fc':a.out==='PARTIAL BREACH'?'badge-pb':a.out==='DEFLECTED'?'badge-def':'badge-safe';
+    document.getElementById('atk-info-title').innerHTML = `<span style="color:${OUT_COLOR[a.out]}">●</span> ${a.id} — GEN-${a.gen} · ${a.type.toUpperCase()}`;
+    document.getElementById('atk-info-body').innerHTML = `
+      <div class="graph-info-row"><b>Vuln Type:</b> <span class="badge badge-vuln">${a.vuln}</span></div>
+      <div class="graph-info-row"><b>Payload:</b> ${esc(a.pay)}</div>
+      <div class="graph-info-row"><b>Response:</b> ${esc(a.resp)}</div>
+      <div class="graph-info-row"><b>Drift:</b> ${a.drift} · <b>Protocol:</b> ${a.proto} · <b>Consistency:</b> ${a.cons} · <b>Final Score:</b> ${a.score}</div>
+      <div class="graph-info-row"><b>Outcome:</b> <span class="badge ${bc}">${a.out}</span></div>`;
+    panel.classList.add('visible');
+  });
+  atkNetwork.on('blurNode', () => { document.getElementById('atk-info').classList.remove('visible'); });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BUILDER — PERSONA EVOLUTION GRAPH (vis-network)
+   ═══════════════════════════════════════════════════════════════ */
+function initPersonaGraph() {
+  if (defNetwork) { defNetwork.destroy(); defNetwork = null; }
+  const container = document.getElementById('def-graph');
+  if (!PERSONAS.length) { container.innerHTML = '<div class="empty-state">🛡️ Click "Harden System" to generate<br>persona evolution graph</div>'; return; }
+  container.innerHTML = '';
+
+  const nodes = new vis.DataSet(PERSONAS.map((p, i) => ({
+    id: p.id,
+    label: `v${i + 1}\n${p.timestamp ? p.timestamp.split('T')[1] || '' : ''}`,
+    color: { background: PERSONA_COLORS[i], border: PERSONA_COLORS[i],
+      highlight: { background: '#ffffff', border: PERSONA_COLORS[i] },
+      hover: { background: PERSONA_COLORS[i], border: '#ffffff' } },
+    shape: 'dot', size: 35,
+    font: { color: '#e2e8f0', size: 14, face: 'JetBrains Mono, monospace', bold: { color: '#e2e8f0' } },
+    borderWidth: 3, shadow: { enabled: true, color: PERSONA_COLORS[i] + '55', size: 15 },
+  })));
+
+  const edges = new vis.DataSet();
+  for (let i = 0; i < PERSONAS.length - 1; i++) {
+    edges.add({ from: PERSONAS[i].id, to: PERSONAS[i + 1].id, label: 'patched',
+      color: { color: '#aaaaaa', highlight: '#00d4ff', hover: '#00d4ff88' },
+      width: 3, arrows: { to: { enabled: true, scaleFactor: 1 } },
+      font: { color: '#4a5568', size: 10, face: 'JetBrains Mono, monospace', strokeWidth: 0 },
+      smooth: { type: 'cubicBezier', roundness: 0.3 } });
+  }
+
+  defNetwork = new vis.Network(container, { nodes, edges }, {
+    physics: { enabled: true, solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -45, centralGravity: 0.01, springLength: 160, springConstant: 0.05, damping: 0.5 },
+      stabilization: { iterations: 100 } },
+    interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true, dragNodes: true },
+    layout: { hierarchical: false },
+  });
+
+  defNetwork.on('hoverNode', (params) => {
+    const panel = document.getElementById('def-info');
+    const idx = PERSONAS.findIndex(p => p.id === params.node);
+    if (idx < 0) return;
+    const p = PERSONAS[idx];
+    document.getElementById('def-info-title').innerHTML = `<span style="color:${PERSONA_COLORS[idx]}">●</span> ${p.label}`;
+    let body = `<div class="graph-info-row"><b>Timestamp:</b> ${p.timestamp}</div>`;
+    body += `<div class="graph-info-row"><b>Content:</b> ${esc(p.content)}</div>`;
+    if (p.changes) body += `<div class="graph-info-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #1e2433"><b>🔄 What Changed:</b> ${esc(p.changes)}</div>`;
+    else body += `<div class="graph-info-row" style="color:var(--accent-green)">✨ Original persona — baseline version</div>`;
+    document.getElementById('def-info-body').innerHTML = body;
+    panel.classList.add('visible');
+  });
+  defNetwork.on('blurNode', () => { document.getElementById('def-info').classList.remove('visible'); });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TABLE + UI RENDERERS
+   ═══════════════════════════════════════════════════════════════ */
+function renderAtkTable() {
+  const tbody = document.getElementById('atk-tbody');
+  if (!ATK.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:20px">No attack data yet</td></tr>'; return; }
+  const sorted = [...ATK].sort((a,b) => b.score - a.score);
+  tbody.innerHTML = sorted.map(a => {
+    const bc = a.out==='FULL COMPROMISE'?'badge-fc':a.out==='PARTIAL BREACH'?'badge-pb':a.out==='DEFLECTED'?'badge-def':'badge-safe';
+    return `<tr><td>GEN-${a.gen}</td><td>${a.type}</td><td><span class="badge badge-vuln">${a.vuln}</span></td>
+      <td class="col-score">${a.drift.toFixed(3)}</td><td class="col-score">${a.proto.toFixed(3)}</td>
+      <td class="col-score">${a.score.toFixed(3)}</td><td><span class="badge ${bc}">${a.out}</span></td></tr>`;
+  }).join('');
+}
+
+function renderPayloads() {
+  if (!ATK.length) {
+    document.getElementById('success-payloads').innerHTML = '<div style="color:var(--text-dim);font-size:10px;padding:4px">—</div>';
+    document.getElementById('failed-payloads').innerHTML = '<div style="color:var(--text-dim);font-size:10px;padding:4px">—</div>';
+    return;
+  }
+  const s = ATK.filter(a=>a.drift>.3).map(a=>a.pay.substring(0,65)+'...');
+  const f = ATK.filter(a=>a.drift<=.3).map(a=>a.pay.substring(0,65)+'...');
+  document.getElementById('success-payloads').innerHTML = s.map(p=>`<div class="payload-item">${esc(p)}</div>`).join('');
+  document.getElementById('failed-payloads').innerHTML = f.map(p=>`<div class="payload-item">${esc(p)}</div>`).join('');
+}
+
+function renderVulnCards(vulns) {
+  const el = document.getElementById('vuln-cards');
+  if (!vulns || !vulns.length) { el.innerHTML = '<div class="empty-state" style="height:80px">No vulnerabilities analyzed yet</div>'; return; }
+  el.innerHTML = vulns.map(v=>`
+    <div class="vuln-card"><div class="vuln-card-header">
+      <div style="display:flex;align-items:center;gap:10px"><span class="occ-count">${v.count}</span><span class="badge badge-vuln">${v.type}</span></div>
+      <span class="badge badge-${v.severity.toLowerCase()}">${v.severity}</span>
+    </div><div class="vuln-card-body">${v.fix}</div></div>`).join('');
+}
+
+function renderGuardrails(guardrails) {
+  const el = document.getElementById('guardrails');
+  if (!guardrails || !guardrails.length) { el.innerHTML = '<div class="empty-state" style="height:60px">No guardrails applied yet</div>'; return; }
+  el.innerHTML = guardrails.map(r=>`<div class="guardrail-item"><span style="color:var(--accent-green);margin-right:8px">✓</span>${esc(r)}</div>`).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   JUDGE — RENDERERS
+   ═══════════════════════════════════════════════════════════════ */
+function renderJudgeVerdict(data) {
+  if (!data) return;
+  const banner = document.getElementById('verdict-banner');
+  const vt = data.verdict || 'PENDING';
+  const icon = {SECURE:'🟢', WEAK:'🟡', VULNERABLE:'🔴'}[vt] || '⚪';
+  const color = {SECURE:'#00ff88', WEAK:'#ffaa00', VULNERABLE:'#ff3366'}[vt] || '#888';
+  banner.querySelector('.verdict-text').textContent = `${icon} ${vt}`;
+  banner.querySelector('.verdict-text').style.color = color;
+  banner.querySelector('.verdict-label').style.color = color;
+  banner.className = 'verdict-banner' + (vt === 'SECURE' ? ' secure' : '');
+}
+
+function renderJudgeChart(data) {
+  if (!data || !data.chart_cats) return;
+  if (judgeChart) judgeChart.destroy();
+  Chart.defaults.color = '#8892a6';
+  Chart.defaults.font.family = "'JetBrains Mono'";
+  judgeChart = new Chart(document.getElementById('chart-judge').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: data.chart_cats,
+      datasets:[
+        {label:'Pre-Defense',data:data.chart_before,backgroundColor:'#ff336666',borderColor:'#ff3366',borderWidth:1,borderRadius:3,maxBarThickness:32},
+        {label:'Post-Defense',data:data.chart_after,backgroundColor:'#00ff8855',borderColor:'#00ff88',borderWidth:1,borderRadius:3,maxBarThickness:32},
+      ],
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:1000},
+      scales:{x:{grid:{display:false},ticks:{color:'#4a5568',font:{size:9}}},y:{min:0,max:1,grid:{color:'#1e2433'},ticks:{color:'#4a5568',stepSize:.2}}},
+      plugins:{legend:{labels:{color:'#8892a6',usePointStyle:true,pointStyle:'rectRounded',padding:16,font:{size:10}}},
+        tooltip:{backgroundColor:'#0f1117ee',borderColor:'#00d4ff44',borderWidth:1}},
+    },
+  });
+}
+
+function renderClaimsTable(data) {
+  const tbody = document.getElementById('claims-tbody');
+  if (!data || !data.claims_verdicts) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:20px">Run evaluation to see results</td></tr>'; return; }
+  tbody.innerHTML = data.claims_verdicts.map(c => {
+    const imp = c.pre > 0 ? ((1 - c.post / c.pre) * 100).toFixed(0) : 0;
+    const vc = c.verdict === 'UPHELD' ? 'badge-upheld' : 'badge-false';
+    return `<tr><td style="max-width:180px;white-space:normal">${esc(c.claim)}</td>
+      <td class="col-score">${c.pre.toFixed(3)}</td><td class="col-score">${c.post.toFixed(3)}</td>
+      <td><div class="improvement-bar-cell"><div class="improvement-bar"><div class="improvement-bar-fill" style="width:${imp}%"></div></div><span style="color:var(--accent-green);font-weight:600;font-size:11px">${imp}%</span></div></td>
+      <td><span class="badge ${vc}">CLAIM ${c.verdict}</span></td></tr>`;
+  }).join('');
+}
+
+function renderSessionSummary(data) {
+  if (!data) return;
+  const items = document.querySelectorAll('.summary-item-value');
+  if (items.length >= 5) {
+    items[0].textContent = data.session_id || 'N/A';
+    items[1].textContent = data.timestamp || new Date().toISOString();
+    items[2].textContent = String(data.total_claims || 0);
+    items[3].textContent = String(data.total_records || 0);
+    items[4].textContent = data.verdict || 'PENDING';
+    items[4].style.color = {SECURE:'var(--accent-green)', WEAK:'var(--accent-amber)', VULNERABLE:'var(--accent-red)'}[data.verdict] || 'var(--text-primary)';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TAB SWITCHING
+   ═══════════════════════════════════════════════════════════════ */
+document.querySelectorAll('.nav-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b===btn));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-'+btn.dataset.tab));
+    document.querySelectorAll('.graph-info').forEach(p => p.classList.remove('visible'));
+    setTimeout(() => {
+      if (btn.dataset.tab==='hacker' && ATK.length)  { initAttackGraph(); renderAtkTable(); renderPayloads(); }
+      if (btn.dataset.tab==='builder' && PERSONAS.length) { initPersonaGraph(); }
+    }, 50);
+  });
+});
+
+/* ═══ EXPORT ═══ */
+document.getElementById('btn-export').addEventListener('click', () => {
+  const b = new Blob([JSON.stringify({attacks:ATK, edges:ATK_EDGES, personas:PERSONAS, verdict: 'SECURE'}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'axiom-session.json'; a.click();
+});
+
+/* ═══ INIT ═══ */
+updateStepper(-1);
+initAttackGraph();
+renderAtkTable();
+renderPayloads();
+
+// Check server connectivity
+fetch('/api/status').then(r => r.json()).then(d => {
+  document.querySelector('.session-badge span').textContent = d.has_api_keys ? '● LIVE READY' : '● DEMO MODE';
+}).catch(() => {
+  document.querySelector('.session-badge span').textContent = '● OFFLINE';
+  document.querySelector('.session-badge span').style.color = '#ff3366';
+});
+</script>
+</body>
+</html>
